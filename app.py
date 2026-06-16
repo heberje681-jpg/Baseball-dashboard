@@ -1,5 +1,5 @@
 """
-⚾ Baseball Analytics — Real-Time 2025
+⚾ Baseball Analytics — Real-Time 2026
 Source: MLB Official Stats API (statsapi.mlb.com) — FREE, no API key
 """
 import streamlit as st
@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import requests, datetime
 
-st.set_page_config(page_title="⚾ MLB Analytics 2025", page_icon="⚾", layout="wide")
+st.set_page_config(page_title="⚾ MLB Analytics", page_icon="⚾", layout="wide")
 
 # ── Styles ────────────────────────────────────────────────────────────────────
 st.markdown("""
