@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import requests, datetime
 
-st.set_page_config(page_title="⚾ MLB Analytics 2026", page_icon="⚾", layout="wide")
+st.set_page_config(page_title="⚾ MLB Analytics", page_icon="⚾", layout="wide")
 
 st.markdown("""
 <style>
