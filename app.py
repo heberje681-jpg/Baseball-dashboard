@@ -88,9 +88,25 @@ def load_standings():
     })
     if not data:
         return pd.DataFrame()
+    
+    # Mapa salvavidas de IDs de divisiones de la MLB
+    div_map = {
+        200: "American League West",
+        201: "American League East",
+        202: "American League Central",
+        203: "National League West",
+        204: "National League East",
+        205: "National League Central"
+    }
+
     rows = []
     for rec in data.get("records", []):
-        div = rec.get("division", {}).get("name", "")
+        div_id = rec.get("division", {}).get("id")
+        
+        # Si la API no trae el 'name', usamos nuestro mapa con el 'id'
+        div_name = rec.get("division", {}).get("name")
+        div = div_name if div_name else div_map.get(div_id, f"Unknown Div {div_id}")
+        
         for t in rec.get("teamRecords", []):
             rows.append({
                 "Division": div,
