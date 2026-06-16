@@ -9,9 +9,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import requests, datetime
 
-st.set_page_config(page_title="⚾ MLB Analytics", page_icon="⚾", layout="wide")
+st.set_page_config(page_title="⚾ MLB Analytics 2026", page_icon="⚾", layout="wide")
 
-# ── Styles ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
@@ -38,151 +37,132 @@ PT = dict(paper_bgcolor="#0d1117", plot_bgcolor="#0d1117", font_color="#c9d1d9",
           xaxis=dict(gridcolor="#21262d",linecolor="#30363d"),
           yaxis=dict(gridcolor="#21262d",linecolor="#30363d"))
 
-BASE = "https://statsapi.mlb.com/api/v1"
-SEASON = 2026
+BASE   = "https://statsapi.mlb.com/api/v1"
+SEASON = 2025  # MLB API uses 2025 for the active 2026 season
 
-# ── Data helpers ──────────────────────────────────────────────────────────────
+LOW_BETTER = {"ERA","WHIP","earnedRunAverage","whip"}
+
 @st.cache_data(ttl=300, show_spinner=False)
 def get(url, params=None):
     try:
         r = requests.get(url, params=params, timeout=10)
         r.raise_for_status()
         return r.json()
-    except Exception as e:
+    except:
         return None
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_hitting_leaders(limit=150):
-    rows = []
-    for group in ["hitting"]:
-        data = get(f"{BASE}/stats/leaders", {
-            "leaderCategories": "battingAverage,homeRuns,rbi,onBasePlusSlugging,stolenBases,hits,walks,strikeouts",
-            "season": SEASON, "sportId": 1, "limit": limit,
-            "statGroup": group, "gameType": "R"
-        })
-        if not data: return pd.DataFrame()
-        for cat in data.get("leagueLeaders", []):
-            cat_name = cat.get("leaderCategory","")
-            for entry in cat.get("leaders", []):
-                rows.append({
-                    "Name":    entry.get("person",{}).get("fullName",""),
-                    "Team":    entry.get("team",{}).get("name",""),
-                    "TeamAbb": entry.get("team",{}).get("abbreviation",""),
-                    "Rank":    entry.get("rank",0),
-                    "Stat":    cat_name,
-                    "Value":   entry.get("value","0"),
-                })
-    return pd.DataFrame(rows)
-
-@st.cache_data(ttl=300, show_spinner=False)
-def load_pitching_leaders(limit=100):
-    rows = []
+def load_leaders(stat_group, categories, limit=150):
     data = get(f"{BASE}/stats/leaders", {
-        "leaderCategories": "earnedRunAverage,strikeouts,wins,whip,saves,inningsPitched",
+        "leaderCategories": ",".join(categories),
         "season": SEASON, "sportId": 1, "limit": limit,
-        "statGroup": "pitching", "gameType": "R"
+        "statGroup": stat_group, "gameType": "R"
     })
-    if not data: return pd.DataFrame()
+    if not data:
+        return pd.DataFrame()
+    rows = []
     for cat in data.get("leagueLeaders", []):
-        cat_name = cat.get("leaderCategory","")
+        cat_name = cat.get("leaderCategory", "")
         for entry in cat.get("leaders", []):
             rows.append({
-                "Name":    entry.get("person",{}).get("fullName",""),
-                "Team":    entry.get("team",{}).get("name",""),
-                "TeamAbb": entry.get("team",{}).get("abbreviation",""),
-                "Rank":    entry.get("rank",0),
+                "Name":    entry.get("person",  {}).get("fullName", ""),
+                "Team":    entry.get("team",    {}).get("name", ""),
+                "TeamAbb": entry.get("team",    {}).get("abbreviation", ""),
+                "Rank":    entry.get("rank", 0),
                 "Stat":    cat_name,
-                "Value":   entry.get("value","0"),
+                "Value":   entry.get("value", "0"),
             })
     return pd.DataFrame(rows)
 
+def get_top(df, stat, n=20):
+    sub = df[df["Stat"] == stat].copy()
+    sub["Value"] = pd.to_numeric(sub["Value"], errors="coerce")
+    sub = sub.dropna(subset=["Value"])
+    asc = stat in LOW_BETTER
+    return sub.sort_values("Value", ascending=asc).head(n).reset_index(drop=True)
+
 @st.cache_data(ttl=300, show_spinner=False)
 def load_standings():
-    data = get(f"{BASE}/standings", {"leagueId":"103,104","season":SEASON,"standingsTypes":"regularSeason"})
-    if not data: return pd.DataFrame()
+    data = get(f"{BASE}/standings", {
+        "leagueId": "103,104", "season": SEASON, "standingsTypes": "regularSeason"
+    })
+    if not data:
+        return pd.DataFrame()
     rows = []
-    for rec in data.get("records",[]):
-        div = rec.get("division",{}).get("name","")
-        for t in rec.get("teamRecords",[]):
+    for rec in data.get("records", []):
+        div = rec.get("division", {}).get("name", "")
+        for t in rec.get("teamRecords", []):
             rows.append({
                 "Division": div,
-                "Team":     t.get("team",{}).get("name",""),
-                "W":        t.get("wins",0),
-                "L":        t.get("losses",0),
-                "Pct":      float(t.get("winningPercentage",0)),
-                "GB":       t.get("gamesBack","–"),
-                "RS":       t.get("runsScored",0),
-                "RA":       t.get("runsAllowed",0),
-                "Streak":   t.get("streak",{}).get("streakCode",""),
-                "L10":      t.get("records",{}).get("splitRecords",[{}])[0].get("wins","") if t.get("records",{}).get("splitRecords") else "",
+                "Team":     t.get("team", {}).get("name", ""),
+                "W":        t.get("wins", 0),
+                "L":        t.get("losses", 0),
+                "Pct":      float(t.get("winningPercentage", 0)),
+                "GB":       t.get("gamesBack", "–"),
+                "RS":       t.get("runsScored", 0),
+                "RA":       t.get("runsAllowed", 0),
+                "Streak":   t.get("streak", {}).get("streakCode", ""),
             })
     return pd.DataFrame(rows)
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_today_games():
     today = datetime.date.today().strftime("%Y-%m-%d")
-    data = get(f"{BASE}/schedule", {"sportId":1,"date":today,"hydrate":"linescore,team"})
-    if not data: return []
+    data = get(f"{BASE}/schedule", {"sportId": 1, "date": today, "hydrate": "linescore,team"})
+    if not data:
+        return []
     games = []
-    for date in data.get("dates",[]):
-        for g in date.get("games",[]):
-            status = g.get("status",{}).get("detailedState","")
-            away = g.get("teams",{}).get("away",{})
-            home = g.get("teams",{}).get("home",{})
+    for date in data.get("dates", []):
+        for g in date.get("games", []):
+            away = g.get("teams", {}).get("away", {})
+            home = g.get("teams", {}).get("home", {})
             games.append({
-                "Status":    status,
-                "Away":      away.get("team",{}).get("name",""),
-                "AwayScore": away.get("score","–"),
-                "Home":      home.get("team",{}).get("name",""),
-                "HomeScore": home.get("score","–"),
-                "Inning":    g.get("linescore",{}).get("currentInningOrdinal",""),
-                "Venue":     g.get("venue",{}).get("name",""),
+                "Status":    g.get("status", {}).get("detailedState", ""),
+                "Away":      away.get("team", {}).get("name", ""),
+                "AwayScore": away.get("score", "–"),
+                "Home":      home.get("team", {}).get("name", ""),
+                "HomeScore": home.get("score", "–"),
+                "Inning":    g.get("linescore", {}).get("currentInningOrdinal", ""),
+                "Venue":     g.get("venue", {}).get("name", ""),
             })
     return games
-
-def pivot_leaders(df, stat):
-    sub = df[df["Stat"]==stat].copy()
-    sub["Value"] = pd.to_numeric(sub["Value"], errors="coerce")
-    return sub.dropna(subset=["Value"]).sort_values("Value", ascending=False).head(20)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚾ MLB Analytics")
-    st.markdown(f"**Season {SEASON} · Live data**")
+    st.markdown("**Season 2026 · Live data**")
     st.markdown("---")
-    mode = st.radio("View", ["🏆 Standings","🏏 Batting leaders","⚾ Pitching leaders","📅 Today's games","🔀 Compare players"])
+    mode = st.radio("View", ["🏆 Standings", "🏏 Batting leaders", "⚾ Pitching leaders",
+                              "📅 Today's games", "🔀 Compare players"])
     st.markdown("---")
     st.markdown('<div style="font-size:10px;color:#8b949e;">Source: MLB Official Stats API<br>Updates every 5 min</div>', unsafe_allow_html=True)
+
+updated = datetime.datetime.now().strftime("%H:%M:%S")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STANDINGS
 # ══════════════════════════════════════════════════════════════════════════════
 if "Standings" in mode:
-    st.markdown(f"# MLB Standings · {SEASON}")
+    st.markdown("# MLB Standings · 2026")
     with st.spinner("Fetching live standings…"):
         df = load_standings()
     if df.empty:
         st.error("Could not reach MLB API. Try again in a moment.")
         st.stop()
-
-    updated = datetime.datetime.now().strftime("%H:%M:%S")
     st.caption(f"Last updated: {updated}")
 
-    league = st.radio("League", ["American League","National League"], horizontal=True)
-    al_divs = ["American League West","American League East","American League Central"]
-    nl_divs = ["National League West","National League East","National League Central"]
+    league = st.radio("League", ["American League", "National League"], horizontal=True)
+    al_divs = ["American League West", "American League East", "American League Central"]
+    nl_divs = ["National League West", "National League East", "National League Central"]
     divs = al_divs if "American" in league else nl_divs
 
     cols = st.columns(3)
     for i, div in enumerate(divs):
-        sub = df[df["Division"]==div].sort_values("Pct", ascending=False)
+        sub = df[df["Division"] == div].sort_values("Pct", ascending=False)
         with cols[i]:
             st.markdown(f'<div class="sec">{div.split()[-1]} Division</div>', unsafe_allow_html=True)
-            if sub.empty:
-                st.info("No data")
-                continue
             for _, row in sub.iterrows():
-                pct_bar = "█" * int(row["Pct"]*10) + "░" * (10-int(row["Pct"]*10))
+                pct_bar = "█" * int(row["Pct"] * 10) + "░" * (10 - int(row["Pct"] * 10))
                 st.markdown(f"""
                 <div style="background:#161b22;border:1px solid #21262d;border-radius:6px;padding:10px 14px;margin-bottom:8px;">
                   <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#e6edf3;font-weight:500;">{row['Team']}</div>
@@ -193,9 +173,8 @@ if "Standings" in mode:
     st.markdown("---")
     st.markdown('<div class="sec">Run differential by team</div>', unsafe_allow_html=True)
     df["RunDiff"] = df["RS"] - df["RA"]
-    fig = px.bar(df.sort_values("RunDiff", ascending=False),
-                 x="Team", y="RunDiff", color="RunDiff",
-                 color_continuous_scale=["#f0883e","#8b949e","#3fb950"])
+    fig = px.bar(df.sort_values("RunDiff", ascending=False), x="Team", y="RunDiff",
+                 color="RunDiff", color_continuous_scale=["#f0883e", "#8b949e", "#3fb950"])
     fig.add_hline(y=0, line_color="#8b949e", line_width=1)
     fig.update_layout(**PT, height=350, coloraxis_showscale=False, margin=dict(l=0,r=0,t=10,b=0))
     fig.update_xaxes(tickangle=-45)
@@ -205,38 +184,46 @@ if "Standings" in mode:
 # BATTING LEADERS
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Batting" in mode:
-    st.markdown(f"# Batting Leaders · {SEASON}")
+    st.markdown("# Batting Leaders · 2026")
     with st.spinner("Fetching live batting stats…"):
-        df = load_hitting_leaders()
+        df = load_leaders("hitting", [
+            "battingAverage","homeRuns","rbi","onBasePlusSlugging",
+            "stolenBases","hits","walks","runs","strikeouts"
+        ])
     if df.empty:
         st.error("Could not reach MLB API.")
         st.stop()
-    st.caption(f"Updated: {datetime.datetime.now().strftime('%H:%M:%S')} · Top 150 qualified batters")
+    st.caption(f"Updated: {updated} · Top 150 qualified batters")
 
     stat_map = {
-        "Batting Average":"battingAverage",
-        "Home Runs":"homeRuns",
-        "RBI":"rbi",
-        "OPS":"onBasePlusSlugging",
-        "Stolen Bases":"stolenBases",
-        "Hits":"hits",
-        "Walks":"walks",
-        "Strikeouts":"strikeouts",
+        "Home Runs":       "homeRuns",
+        "RBI":             "rbi",
+        "Batting Average": "battingAverage",
+        "OPS":             "onBasePlusSlugging",
+        "Stolen Bases":    "stolenBases",
+        "Hits":            "hits",
+        "Walks":           "walks",
+        "Runs":            "runs",
+        "Strikeouts":      "strikeouts",
     }
-    chosen = st.selectbox("Stat category", list(stat_map.keys()))
-    top = pivot_leaders(df, stat_map[chosen])
+    chosen     = st.selectbox("Stat category", list(stat_map.keys()))
+    chosen_key = stat_map[chosen]
+    top        = get_top(df, chosen_key)
 
-    c1,c2,c3 = st.columns(3)
-    for col, i in zip([c1,c2,c3],[0,1,2]):
+    c1, c2, c3 = st.columns(3)
+    for col, i in zip([c1, c2, c3], [0, 1, 2]):
         if i < len(top):
             row = top.iloc[i]
             with col:
                 st.markdown(f'<div class="kpi"><div class="kpi-val">{row["Value"]}</div><div class="kpi-lbl">#{i+1} {chosen}</div><div class="kpi-sub">{row["Name"]} · {row["TeamAbb"]}</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    fig = px.bar(top.sort_values("Value"), x="Value", y="Name", orientation="h",
+
+    # Bar chart — always show best at top
+    plot_df = top.sort_values("Value", ascending=True)
+    fig = px.bar(plot_df, x="Value", y="Name", orientation="h",
                  color="Value", color_continuous_scale=["#1f3a5f","#58a6ff","#cae8ff"],
-                 hover_data={"Team":True})
+                 hover_data={"Team": True})
     fig.update_layout(**PT, height=520, coloraxis_showscale=False, margin=dict(l=0,r=0,t=10,b=0))
     st.plotly_chart(fig, use_container_width=True)
 
@@ -248,43 +235,52 @@ elif "Batting" in mode:
 # PITCHING LEADERS
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Pitching" in mode:
-    st.markdown(f"# Pitching Leaders · {SEASON}")
+    st.markdown("# Pitching Leaders · 2026")
     with st.spinner("Fetching live pitching stats…"):
-        df = load_pitching_leaders()
+        df = load_leaders("pitching", [
+            "earnedRunAverage","strikeouts","wins","whip","saves","inningsPitched"
+        ])
     if df.empty:
         st.error("Could not reach MLB API.")
         st.stop()
-    st.caption(f"Updated: {datetime.datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"Updated: {updated}")
 
     stat_map = {
-        "ERA":"earnedRunAverage",
-        "Strikeouts":"strikeouts",
-        "Wins":"wins",
-        "WHIP":"whip",
-        "Saves":"saves",
-        "Innings Pitched":"inningsPitched",
+        "ERA":             "earnedRunAverage",
+        "Strikeouts":      "strikeouts",
+        "Wins":            "wins",
+        "WHIP":            "whip",
+        "Saves":           "saves",
+        "Innings Pitched": "inningsPitched",
     }
-    chosen = st.selectbox("Stat category", list(stat_map.keys()))
-    top = pivot_leaders(df, stat_map[chosen])
-if chosen in ["ERA","WHIP"]:
-    top = top.sort_values("Value", ascending=True).head(20)
-else:
-    top = top.sort_values("Value", ascending=False).head(20)
+    chosen     = st.selectbox("Stat category", list(stat_map.keys()))
+    chosen_key = stat_map[chosen]
+    low_better = chosen_key in LOW_BETTER
+    top        = get_top(df, chosen_key)
 
-    c1,c2,c3 = st.columns(3)
-    for col, i in zip([c1,c2,c3],[0,1,2]):
+    c1, c2, c3 = st.columns(3)
+    for col, i in zip([c1, c2, c3], [0, 1, 2]):
         if i < len(top):
             row = top.iloc[i]
             with col:
                 st.markdown(f'<div class="kpi"><div class="kpi-val">{row["Value"]}</div><div class="kpi-lbl">#{i+1} {chosen}</div><div class="kpi-sub">{row["Name"]} · {row["TeamAbb"]}</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-   plot_df = top.sort_values("Value", ascending=chosen not in ["ERA","WHIP"])
+
+    # For low-better stats (ERA, WHIP): lowest value = best = show at top (ascending=False for horizontal bar)
+    # For high-better stats: highest = best = show at top (ascending=True for horizontal bar)
+    plot_asc = not low_better
+    plot_df  = top.sort_values("Value", ascending=plot_asc)
     fig = px.bar(plot_df, x="Value", y="Name", orientation="h",
-                 color="Value", color_continuous_scale=["#1f3a5f","#58a6ff","#cae8ff"],
-                 hover_data={"Team":True})
+                 color="Value",
+                 color_continuous_scale=["#cae8ff","#58a6ff","#1f3a5f"] if low_better else ["#1f3a5f","#58a6ff","#cae8ff"],
+                 hover_data={"Team": True})
     fig.update_layout(**PT, height=520, coloraxis_showscale=False, margin=dict(l=0,r=0,t=10,b=0))
     st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Full table"):
+        st.dataframe(top[["Rank","Name","Team","Value"]].reset_index(drop=True),
+                     use_container_width=True, hide_index=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TODAY'S GAMES
@@ -298,16 +294,16 @@ elif "Today" in mode:
     if not games:
         st.info("No games scheduled today or data unavailable.")
     else:
-        live   = [g for g in games if "Progress" in g["Status"] or "In Progress" in g["Status"]]
-        final  = [g for g in games if "Final" in g["Status"]]
-        sched  = [g for g in games if g not in live and g not in final]
+        live  = [g for g in games if "Progress" in g["Status"]]
+        final = [g for g in games if "Final"    in g["Status"]]
+        sched = [g for g in games if g not in live and g not in final]
 
         if live:
             st.markdown('<div class="sec">🔴 Live now</div>', unsafe_allow_html=True)
             for g in live:
                 st.markdown(f"""
                 <div style="background:#1a2332;border:1px solid #1f6feb;border-radius:8px;padding:12px 18px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-                  <div style="font-size:14px;color:#e6edf3;">{g['Away']} <span style="color:#8b949e;">vs</span> {g['Home']}</div>
+                  <div style="font-size:13px;color:#e6edf3;">{g['Away']} <span style="color:#8b949e;">vs</span> {g['Home']}</div>
                   <div style="font-family:'IBM Plex Mono',monospace;font-size:18px;color:#58a6ff;">{g['AwayScore']} – {g['HomeScore']}</div>
                   <div style="font-size:11px;color:#3fb950;">{g['Inning']}</div>
                 </div>""", unsafe_allow_html=True)
@@ -315,14 +311,17 @@ elif "Today" in mode:
         if final:
             st.markdown('<div class="sec">✅ Final</div>', unsafe_allow_html=True)
             for g in final:
-                winner_side = "away" if str(g['AwayScore']) > str(g['HomeScore']) else "home"
-                away_style = "color:#e6edf3;font-weight:600;" if winner_side=="away" else "color:#8b949e;"
-                home_style = "color:#e6edf3;font-weight:600;" if winner_side=="home" else "color:#8b949e;"
+                try:
+                    home_w = int(str(g['HomeScore'])) > int(str(g['AwayScore']))
+                except:
+                    home_w = False
+                hs = "color:#e6edf3;font-weight:600;" if home_w     else "color:#8b949e;"
+                as_ = "color:#e6edf3;font-weight:600;" if not home_w else "color:#8b949e;"
                 st.markdown(f"""
                 <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:10px 18px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-                  <div style="font-size:13px;{away_style}">{g['Away']}</div>
+                  <div style="font-size:13px;{as_}">{g['Away']}</div>
                   <div style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:#c9d1d9;">{g['AwayScore']} – {g['HomeScore']}</div>
-                  <div style="font-size:13px;{home_style}">{g['Home']}</div>
+                  <div style="font-size:13px;{hs}">{g['Home']}</div>
                 </div>""", unsafe_allow_html=True)
 
         if sched:
@@ -339,37 +338,60 @@ elif "Today" in mode:
 # COMPARE PLAYERS
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Compare" in mode:
-    st.markdown(f"# Player Comparison · {SEASON}")
-    comp_type = st.radio("Type", ["Batters","Pitchers"], horizontal=True)
+    st.markdown("# Player Comparison · 2026")
+    comp_type = st.radio("", ["Batters", "Pitchers"], horizontal=True)
 
-    with st.spinner("Loading leaders…"):
-        if comp_type == "Batters":
-            df = load_hitting_leaders(200)
-            stat_cols = {"HR":"homeRuns","AVG":"battingAverage","OPS":"onBasePlusSlugging","RBI":"rbi","SB":"stolenBases","H":"hits"}
-        else:
-            df = load_pitching_leaders(150)
-            stat_cols = {"ERA":"earnedRunAverage","K":"strikeouts","W":"wins","WHIP":"whip","SV":"saves","IP":"inningsPitched"}
+    if comp_type == "Batters":
+        with st.spinner("Loading…"):
+            df = load_leaders("hitting", [
+                "homeRuns","rbi","battingAverage","onBasePlusSlugging",
+                "stolenBases","hits","walks","runs"
+            ], 200)
+        stat_cols = {
+            "HR":  "homeRuns",
+            "RBI": "rbi",
+            "AVG": "battingAverage",
+            "OPS": "onBasePlusSlugging",
+            "SB":  "stolenBases",
+            "H":   "hits",
+        }
+    else:
+        with st.spinner("Loading…"):
+            df = load_leaders("pitching", [
+                "earnedRunAverage","strikeouts","wins","whip","saves","inningsPitched"
+            ], 150)
+        stat_cols = {
+            "ERA": "earnedRunAverage",
+            "K":   "strikeouts",
+            "W":   "wins",
+            "WHIP":"whip",
+            "SV":  "saves",
+            "IP":  "inningsPitched",
+        }
 
     if df.empty:
         st.error("Could not reach MLB API.")
         st.stop()
 
     all_players = sorted(df["Name"].unique().tolist())
-    defaults = all_players[:4] if len(all_players) >= 4 else all_players
-    selected = st.multiselect("Select players (2–6)", all_players, default=defaults, max_selections=6)
+    defaults    = all_players[:4]
+    selected    = st.multiselect("Select players (2–6)", all_players, default=defaults, max_selections=6)
 
     if len(selected) < 2:
         st.info("Pick at least 2 players.")
         st.stop()
 
+    # Build value matrix
     player_data = {}
     for player in selected:
         player_data[player] = {}
         for short, long in stat_cols.items():
-            sub = df[(df["Name"]==player) & (df["Stat"]==long)]
+            sub = df[(df["Name"] == player) & (df["Stat"] == long)]
             if not sub.empty:
-                try: player_data[player][short] = float(sub.iloc[0]["Value"])
-                except: player_data[player][short] = 0.0
+                try:
+                    player_data[player][short] = float(sub.iloc[0]["Value"])
+                except:
+                    player_data[player][short] = 0.0
             else:
                 player_data[player][short] = 0.0
 
@@ -377,28 +399,23 @@ elif "Compare" in mode:
     fig = go.Figure()
     colors = ["#58a6ff","#3fb950","#f0883e","#d2a8ff","#ffa657","#79c0ff"]
     for i, player in enumerate(selected):
-        vals = [player_data[player].get(m,0) for m in metrics]
-        mx = max(vals) if max(vals) > 0 else 1
-        vals_norm = [v/mx for v in vals]
+        vals = [player_data[player].get(m, 0) for m in metrics]
+        mx   = max(vals) if max(vals) > 0 else 1
+        vals_n = [v / mx for v in vals]
         fig.add_trace(go.Scatterpolar(
-            r=vals_norm + [vals_norm[0]],
+            r=vals_n + [vals_n[0]],
             theta=metrics + [metrics[0]],
             fill="toself", name=player,
             line_color=colors[i % len(colors)],
             opacity=0.65,
-            customdata=[vals + [vals[0]]],
-            hovertemplate="%{theta}: %{customdata[0]:.2f}<extra>" + player + "</extra>",
         ))
     fig.update_layout(**PT, height=480,
                       polar=dict(bgcolor="#161b22",
-                                 radialaxis=dict(visible=True,gridcolor="#21262d",color="#8b949e",showticklabels=False),
-                                 angularaxis=dict(gridcolor="#21262d",color="#c9d1d9")),
+                                 radialaxis=dict(visible=True, gridcolor="#21262d", color="#8b949e", showticklabels=False),
+                                 angularaxis=dict(gridcolor="#21262d", color="#c9d1d9")),
                       showlegend=True, margin=dict(l=60,r=60,t=40,b=40))
     st.plotly_chart(fig, use_container_width=True)
 
-    table_rows = []
-    for player in selected:
-        row = {"Player": player}
-        row.update(player_data[player])
-        table_rows.append(row)
+    # Table
+    table_rows = [{"Player": p, **player_data[p]} for p in selected]
     st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
