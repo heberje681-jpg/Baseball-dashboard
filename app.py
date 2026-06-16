@@ -38,7 +38,7 @@ PT = dict(paper_bgcolor="#0d1117", plot_bgcolor="#0d1117", font_color="#c9d1d9",
           yaxis=dict(gridcolor="#21262d",linecolor="#30363d"))
 
 BASE   = "https://statsapi.mlb.com/api/v1"
-SEASON = 2025  # MLB API uses 2025 for the active 2026 season
+SEASON = 2026  
 
 LOW_BETTER = {"ERA","WHIP","earnedRunAverage","whip"}
 
