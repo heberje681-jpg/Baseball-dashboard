@@ -39,7 +39,7 @@ PT = dict(paper_bgcolor="#0d1117", plot_bgcolor="#0d1117", font_color="#c9d1d9",
           yaxis=dict(gridcolor="#21262d",linecolor="#30363d"))
 
 BASE = "https://statsapi.mlb.com/api/v1"
-SEASON = 2025
+SEASON = 2026
 
 # ── Data helpers ──────────────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
