@@ -140,6 +140,7 @@ with st.sidebar:
 updated = datetime.datetime.now().strftime("%H:%M:%S")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
 # STANDINGS
 # ══════════════════════════════════════════════════════════════════════════════
 if "Standings" in mode:
@@ -161,14 +162,15 @@ if "Standings" in mode:
         sub = df[df["Division"] == div].sort_values("Pct", ascending=False)
         with cols[i]:
             st.markdown(f'<div class="sec">{div.split()[-1]} Division</div>', unsafe_allow_html=True)
-            for _, row in sub.iterrows():
-                pct_bar = "█" * int(row["Pct"] * 10) + "░" * (10 - int(row["Pct"] * 10))
-                st.markdown(f"""
-                <div style="background:#161b22;border:1px solid #21262d;border-radius:6px;padding:10px 14px;margin-bottom:8px;">
-                  <div style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#e6edf3;font-weight:500;">{row['Team']}</div>
-                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#58a6ff;margin-top:2px;">{row['W']}-{row['L']} &nbsp;·&nbsp; .{str(int(row['Pct']*1000)).zfill(3)} &nbsp;·&nbsp; GB: {row['GB']}</div>
-                  <div style="font-size:10px;color:#3fb950;margin-top:2px;">{pct_bar} &nbsp;{row['Streak']}</div>
-                </div>""", unsafe_allow_html=True)
+            
+            # --- SOLUCIÓN: Crear un DataFrame limpio y mostrarlo como tabla ---
+            display_df = sub[["Team", "W", "L", "Pct", "GB", "Streak"]].copy()
+            
+            # Formateamos el PCT al estilo beisbolero (ej. .500 en lugar de 0.5)
+            display_df["Pct"] = display_df["Pct"].apply(lambda x: f"{x:.3f}".replace("0.", "."))
+            
+            # Renderizamos la tabla nativa de Streamlit (ocultando el índice numérico)
+            st.dataframe(display_df, hide_index=True, use_container_width=True)
 
     st.markdown("---")
     st.markdown('<div class="sec">Run differential by team</div>', unsafe_allow_html=True)
@@ -179,7 +181,6 @@ if "Standings" in mode:
     fig.update_layout(**PT, height=350, coloraxis_showscale=False, margin=dict(l=0,r=0,t=10,b=0))
     fig.update_xaxes(tickangle=-45)
     st.plotly_chart(fig, use_container_width=True)
-
 # ══════════════════════════════════════════════════════════════════════════════
 # BATTING LEADERS
 # ══════════════════════════════════════════════════════════════════════════════
