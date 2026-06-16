@@ -266,8 +266,10 @@ elif "Pitching" in mode:
     }
     chosen = st.selectbox("Stat category", list(stat_map.keys()))
     top = pivot_leaders(df, stat_map[chosen])
-    ascending = chosen in ["ERA","WHIP"]
-    top = top.sort_values("Value", ascending=ascending).head(20)
+if chosen in ["ERA","WHIP"]:
+    top = top.sort_values("Value", ascending=True).head(20)
+else:
+    top = top.sort_values("Value", ascending=False).head(20)
 
     c1,c2,c3 = st.columns(3)
     for col, i in zip([c1,c2,c3],[0,1,2]):
@@ -277,7 +279,7 @@ elif "Pitching" in mode:
                 st.markdown(f'<div class="kpi"><div class="kpi-val">{row["Value"]}</div><div class="kpi-lbl">#{i+1} {chosen}</div><div class="kpi-sub">{row["Name"]} · {row["TeamAbb"]}</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    plot_df = top.sort_values("Value", ascending=not ascending)
+   plot_df = top.sort_values("Value", ascending=chosen not in ["ERA","WHIP"])
     fig = px.bar(plot_df, x="Value", y="Name", orientation="h",
                  color="Value", color_continuous_scale=["#1f3a5f","#58a6ff","#cae8ff"],
                  hover_data={"Team":True})
